@@ -1,0 +1,101 @@
+#  Import Libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    roc_curve,
+    auc,
+    RocCurveDisplay
+)
+
+from imblearn.over_sampling import SMOTE
+
+# Settings
+sns.set(style="whitegrid")
+plt.rcParams['figure.figsize'] = (10, 6)
+
+# Load Data
+df = pd.read_csv('creditcard.csv')
+
+# Explore Class Imbalance
+print("Class distribution:\n", df['Class'].value_counts())
+
+# Normalize 'Amount' and 'Time'
+scaler = StandardScaler()
+df['Amount'] = scaler.fit_transform(df['Amount'].values.reshape(-1, 1))
+df['Time'] = scaler.fit_transform(df['Time'].values.reshape(-1, 1))
+
+# Split Features and Target
+X = df.drop('Class', axis=1)
+y = df['Class']
+
+# rain/Test Split
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.3, random_state=42, stratify=y
+)
+
+#  Handle Class Imbalance with SMOTE
+smote = SMOTE(random_state=42)
+X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
+
+print("\nAfter SMOTE Resampling:")
+print(pd.Series(y_train_res).value_counts())
+
+# Train Models
+# Logistic Regression
+lr = LogisticRegression(max_iter=1000)
+lr.fit(X_train_res, y_train_res)
+y_pred_lr = lr.predict(X_test)
+y_score_lr = lr.predict_proba(X_test)[:, 1]
+
+# Random Forest
+rf = RandomForestClassifier(n_estimators=100, random_state=42)
+rf.fit(X_train_res, y_train_res)
+y_pred_rf = rf.predict(X_test)
+y_score_rf = rf.predict_proba(X_test)[:, 1]
+
+#  Evaluation Reports
+print("\n Logistic Regression Report:\n", classification_report(y_test, y_pred_lr, digits=4))
+print("\n Random Forest Report:\n", classification_report(y_test, y_pred_rf, digits=4))
+
+#  Confusion Matrices
+fig, ax = plt.subplots(1, 2, figsize=(14, 5))
+
+sns.heatmap(confusion_matrix(y_test, y_pred_lr), annot=True, fmt='d', cmap='Blues', ax=ax[0])
+ax[0].set_title('Logistic Regression Confusion Matrix')
+ax[0].set_xlabel('Predicted')
+ax[0].set_ylabel('Actual')
+
+sns.heatmap(confusion_matrix(y_test, y_pred_rf), annot=True, fmt='d', cmap='Greens', ax=ax[1])
+ax[1].set_title('Random Forest Confusion Matrix')
+ax[1].set_xlabel('Predicted')
+ax[1].set_ylabel('Actual')
+
+plt.tight_layout()
+plt.show()
+
+# . ROC Curve
+fpr_lr, tpr_lr, _ = roc_curve(y_test, y_score_lr)
+fpr_rf, tpr_rf, _ = roc_curve(y_test, y_score_rf)
+
+roc_auc_lr = auc(fpr_lr, tpr_lr)
+roc_auc_rf = auc(fpr_rf, tpr_rf)
+
+plt.plot(fpr_lr, tpr_lr, color='blue', label=f'Logistic Regression (AUC = {roc_auc_lr:.4f})')
+plt.plot(fpr_rf, tpr_rf, color='green', label=f'Random Forest (AUC = {roc_auc_rf:.4f})')
+
+plt.plot([0, 1], [0, 1], color='gray', linestyle='--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve')
+plt.legend(loc='lower right')
+plt.grid(True)
+plt.show()
